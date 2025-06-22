@@ -5,11 +5,18 @@ const ToolContext = createContext();
 export const useTool = () => useContext(ToolContext);
 
 export const ToolProvider = ({ children }) => {
-  const [tool, setTool] = useState("select");
-  const [showAnnotations, setShowAnnotations] = useState(true);
+  const [activeTool, setActiveTool] = useState("select");
+  const [areAnnotationsVisible, setAreAnnotationsVisible] = useState(true);
+
+  const contextValue = {
+    tool: activeTool,
+    setTool: setActiveTool,
+    showAnnotations: areAnnotationsVisible,
+    setShowAnnotations: setAreAnnotationsVisible,
+  };
 
   return (
-    <ToolContext.Provider value={{ tool, setTool, showAnnotations, setShowAnnotations }}>
+    <ToolContext.Provider value={contextValue}>
       {children}
     </ToolContext.Provider>
   );

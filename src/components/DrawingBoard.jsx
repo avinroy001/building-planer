@@ -1,21 +1,43 @@
 import { useEffect, useRef, useState } from "react";
 import { useTool } from "../context/ToolContext";
+import "./DrawingBoard.css";
+
 
 const DrawingBoard = () => {
   const canvasRef = useRef(null);
   const { tool, showAnnotations } = useTool();
-  const [shapes, setShapes] = useState([]);
-  const [start, setStart] = useState(null);
-  const [selectedShapeIndex, setSelectedShapeIndex] = useState(null);
-  const [dragging, setDragging] = useState(false);
-  const [resizing, setResizing] = useState(false);
+  const [drawnShapes, setDrawnShapes] = useState([]);
+  const [startPoint, setStartPoint] = useState(null);
+  const [selectedShape, setSelectedShape] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+
+  useEffect(() => {
+    if (canvasRef.current) {
+      canvasRef.current.focus();
+    }
+  }, []);
+
+  const handleDeleteShape = () => {
+    if (selectedShape !== null) {
+      setDrawnShapes(prev => prev.filter((_, i) => i !== selectedShape));
+      setSelectedShape(null);
+    }
+  };
+
+  const handleDeleteKeyDown = (e) => {
+    if (e.key === "Delete") {
+      e.preventDefault();
+      handleDeleteShape();
+    }
+  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    shapes.forEach((shape, index) => {
+    drawnShapes.forEach((shape, index) => {
       ctx.beginPath();
       if (shape.type === "line") {
         ctx.moveTo(shape.start.x, shape.start.y);
@@ -37,193 +59,191 @@ const DrawingBoard = () => {
         }
       }
 
-      // Highlight selected shape
-      ctx.strokeStyle = index === selectedShapeIndex ? "red" : "black";
-      ctx.lineWidth = index === selectedShapeIndex ? 3 : 1;
-
+      ctx.strokeStyle = index === selectedShape ? "red" : "black";
+      ctx.lineWidth = index === selectedShape ? 3 : 1;
       ctx.stroke();
 
-      // Draw resize handle for selected shape
-      if (index === selectedShapeIndex) {
+      if (index === selectedShape) {
         ctx.fillStyle = "blue";
-        const br = getBottomRight(shape);
-        ctx.fillRect(br.x - 4, br.y - 4, 8, 8); // small square handle
+        const resizeHandlePos = getShapeBottomRight(shape);
+        ctx.fillRect(resizeHandlePos.x - 4, resizeHandlePos.y - 4, 8, 8);
       }
     });
-  }, [shapes, showAnnotations, selectedShapeIndex]);
+  }, [drawnShapes, showAnnotations, selectedShape]);
 
-  const getCanvasPoint = (e) => {
-    const rect = canvasRef.current.getBoundingClientRect();
+  const getCanvasCoordinates = (event) => {
+    const canvasRect = canvasRef.current.getBoundingClientRect();
     return {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top
+      x: event.clientX - canvasRect.left,
+      y: event.clientY - canvasRect.top
     };
   };
 
-  const handleMouseDown = (e) => {
-    const point = getCanvasPoint(e);
-
-    if (tool === "select") {
-      const clickedIndex = shapes.findIndex(shape => isPointInShape(point, shape));
-      if (clickedIndex >= 0) {
-        const shape = shapes[clickedIndex];
-        if (isNearResizeHandle(point, shape)) {
-          setResizing(true);
-        } else {
-          setDragging(true);
-        }
-        setSelectedShapeIndex(clickedIndex);
-        setStart(point);
-      } else {
-        setSelectedShapeIndex(null);
-      }
-    } else if (tool !== "select") {
-      setStart(point);
-    }
-  };
-
-  const handleMouseMove = (e) => {
-    const point = getCanvasPoint(e);
-
-    if (dragging && selectedShapeIndex !== null) {
-      const dx = point.x - start.x;
-      const dy = point.y - start.y;
-
-      setShapes(prev =>
-        prev.map((shape, i) =>
-          i === selectedShapeIndex
-            ? {
-                ...shape,
-                start: { x: shape.start.x + dx, y: shape.start.y + dy },
-                end: { x: shape.end.x + dx, y: shape.end.y + dy }
-              }
-            : shape
-        )
-      );
-
-      setStart(point);
-    }
-
-    if (resizing && selectedShapeIndex !== null) {
-      setShapes(prev =>
-        prev.map((shape, i) =>
-          i === selectedShapeIndex ? { ...shape, end: point } : shape
-        )
-      );
-    }
-  };
-
-  const handleMouseUp = () => {
-    setDragging(false);
-    setResizing(false);
-  };
-
-  const getBottomRight = (shape) => {
-    if (shape.type === "rectangle") {
-      return { x: shape.end.x, y: shape.end.y };
-    } else if (shape.type === "circle") {
+  const getShapeBottomRight = (shape) => {
+    if (shape.type === "circle") {
       const radius = Math.hypot(shape.end.x - shape.start.x, shape.end.y - shape.start.y);
       return { x: shape.start.x + radius, y: shape.start.y + radius };
-    } else if (shape.type === "line") {
-      return { x: shape.end.x, y: shape.end.y };
+    } else if (shape.type === "rectangle") {
+      return { x: Math.max(shape.start.x, shape.end.x), y: Math.max(shape.start.y, shape.end.y) };
     }
-    return { x: 0, y: 0 };
+    return { x: shape.end.x, y: shape.end.y };
   };
 
-  const isNearResizeHandle = (point, shape) => {
-    const size = 8;
-    const br = getBottomRight(shape);
-    return Math.abs(point.x - br.x) < size && Math.abs(point.y - br.y) < size;
+  const isPointNearResizeHandle = (point, shape) => {
+    const handleSize = 8;
+    const handleLocation = getShapeBottomRight(shape);
+    return (
+      Math.abs(point.x - handleLocation.x) < handleSize &&
+      Math.abs(point.y - handleLocation.y) < handleSize
+    );
   };
 
-  const isPointInShape = (point, shape) => {
-    const tolerance = 5;
+  const isPointWithinShape = (point, shape) => {
+    const hitTolerance = 5;
     const ctx = canvasRef.current.getContext("2d");
-
     ctx.beginPath();
+
     if (shape.type === "line") {
       const dx = shape.end.x - shape.start.x;
       const dy = shape.end.y - shape.start.y;
-      const length = Math.sqrt(dx * dx + dy * dy);
-      const percent =
-        ((point.x - shape.start.x) * dx + (point.y - shape.start.y) * dy) /
-        (length * length);
-      const closestX = shape.start.x + dx * percent;
-      const closestY = shape.start.y + dy * percent;
-      const distance = Math.sqrt(
-        (point.x - closestX) ** 2 + (point.y - closestY) ** 2
-      );
-      return distance < tolerance;
+      const lineLengthSq = dx * dx + dy * dy;
+
+      if (lineLengthSq === 0) {
+        return Math.hypot(point.x - shape.start.x, point.y - shape.start.y) < hitTolerance;
+      }
+
+      const t = ((point.x - shape.start.x) * dx + (point.y - shape.start.y) * dy) / lineLengthSq;
+      const closestX = shape.start.x + dx * Math.max(0, Math.min(1, t));
+      const closestY = shape.start.y + dy * Math.max(0, Math.min(1, t));
+
+      return Math.hypot(point.x - closestX, point.y - closestY) < hitTolerance;
     } else if (shape.type === "rectangle") {
       const xMin = Math.min(shape.start.x, shape.end.x);
       const xMax = Math.max(shape.start.x, shape.end.x);
       const yMin = Math.min(shape.start.y, shape.end.y);
       const yMax = Math.max(shape.start.y, shape.end.y);
       return (
-        point.x >= xMin &&
-        point.x <= xMax &&
-        point.y >= yMin &&
-        point.y <= yMax
+        point.x >= xMin && point.x <= xMax &&
+        point.y >= yMin && point.y <= yMax
       );
     } else if (shape.type === "circle") {
-      const radius = Math.hypot(
-        shape.end.x - shape.start.x,
-        shape.end.y - shape.start.y
-      );
-      const distance = Math.hypot(
-        point.x - shape.start.x,
-        point.y - shape.start.y
-      );
-      return Math.abs(distance - radius) < tolerance;
+      const radius = Math.hypot(shape.end.x - shape.start.x, shape.end.y - shape.start.y);
+      const distance = Math.hypot(point.x - shape.start.x, point.y - shape.start.y);
+      return Math.abs(distance - radius) < hitTolerance;
     }
     return false;
   };
 
-  // Keyboard support: delete selected shape
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === "Delete" && selectedShapeIndex !== null) {
-        e.preventDefault();
-        setShapes((prev) =>
-          prev.filter((_, i) => i !== selectedShapeIndex)
-        );
-        setSelectedShapeIndex(null);
+  const handleMouseDown = (e) => {
+    const currentMousePoint = getCanvasCoordinates(e);
+    setStartPoint(currentMousePoint);
+
+    if (tool === "select") {
+      const clickedShapeIndex = drawnShapes.findIndex(shape =>
+        isPointWithinShape(currentMousePoint, shape)
+      );
+
+      if (clickedShapeIndex !== -1) {
+        const clickedShape = drawnShapes[clickedShapeIndex];
+        setSelectedShape(clickedShapeIndex);
+
+        if (isPointNearResizeHandle(currentMousePoint, clickedShape)) {
+          setIsResizing(true);
+        } else {
+          setIsDragging(true);
+        }
+      } else {
+        setSelectedShape(null);
       }
-    };
+    }
+  };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedShapeIndex]);
+  const handleMouseMove = (e) => {
+    const currentMousePoint = getCanvasCoordinates(e);
 
-  // Draw on mouse up
-  const handleMouseUpDraw = (e) => {
-    if (!start || tool === "select") return;
-    const point = getCanvasPoint(e);
-    setShapes((prev) => [...prev, { type: tool, start, end: point }]);
-    setStart(null);
+    if (isDragging && selectedShape !== null) {
+      const deltaX = currentMousePoint.x - startPoint.x;
+      const deltaY = currentMousePoint.y - startPoint.y;
+
+      setDrawnShapes(prevShapes =>
+        prevShapes.map((shape, index) =>
+          index === selectedShape
+            ? {
+                ...shape,
+                start: { x: shape.start.x + deltaX, y: shape.start.y + deltaY },
+                end: { x: shape.end.x + deltaX, y: shape.end.y + deltaY }
+              }
+            : shape
+        )
+      );
+      setStartPoint(currentMousePoint);
+    }
+
+    if (isResizing && selectedShape !== null) {
+      setDrawnShapes(prevShapes =>
+        prevShapes.map((shape, index) =>
+          index === selectedShape
+            ? shape.type === "circle"
+              ? {
+                  ...shape,
+                  end: {
+                    x: shape.start.x + (currentMousePoint.x - shape.start.x),
+                    y: shape.start.y + (currentMousePoint.y - shape.start.y)
+                  }
+                }
+              : { ...shape, end: currentMousePoint }
+            : shape
+        )
+      );
+    }
+  };
+
+  const handleMouseUp = (e) => {
+    if (startPoint && tool !== "select" && !isDragging && !isResizing) {
+      const endPoint = getCanvasCoordinates(e);
+      setDrawnShapes(prev => [...prev, { type: tool, start: startPoint, end: endPoint }]);
+    }
+    setIsDragging(false);
+    setIsResizing(false);
+    setStartPoint(null);
+  };
+
+  const handleMouseLeave = () => {
+    setIsDragging(false);
+    setIsResizing(false);
+    setStartPoint(null);
   };
 
   return (
-    <canvas
-      ref={canvasRef}
-      width={800}
-      height={600}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
-      onClick={tool !== "select" ? handleMouseUpDraw : undefined}
-      style={{
-        border: "1px solid gray",
-        background: "white",
-        cursor:
-          tool === "select"
-            ? resizing
-              ? "se-resize"
-              : "pointer"
-            : "crosshair"
-      }}
-    />
+    <div>
+      <canvas
+        ref={canvasRef}
+        width={800}
+        height={600}
+        tabIndex={0}
+        onKeyDown={handleDeleteKeyDown}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
+        style={{
+          border: "1px solid gray",
+          background: "white",
+          outline: "none",
+          cursor:
+            tool === "select"
+              ? isResizing
+                ? "se-resize"
+                : "pointer"
+              : "crosshair"
+        }}
+      />
+      {selectedShape !== null && (
+        <button onClick={handleDeleteShape} style={{ marginTop: 10 }}>
+          Delete Selected Shape
+        </button>
+      )}
+    </div>
   );
 };
 
