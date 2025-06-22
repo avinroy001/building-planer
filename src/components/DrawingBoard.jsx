@@ -185,7 +185,6 @@ const DrawingBoard = () => {
       if (clickedShapeIndex !== -1) {
         const clickedShape = drawnShapes[clickedShapeIndex];
 
-        // Check resize handle BEFORE deselecting
         if (isPointNearResizeHandle(currentMousePoint, clickedShape)) {
           setSelectedShape(clickedShapeIndex);
           setIsResizing(true);
@@ -194,7 +193,6 @@ const DrawingBoard = () => {
           setIsDragging(true);
         }
       } else {
-        // Don't deselect if you're clicking near the resize handle of selected shape
         if (
           selectedShape !== null &&
           isPointNearResizeHandle(currentMousePoint, drawnShapes[selectedShape])
@@ -234,7 +232,7 @@ const DrawingBoard = () => {
           index === selectedShape
             ? {
                 ...shape,
-                end: currentMousePoint, // works for both circle and rectangle
+                end: currentMousePoint, 
               }
             : shape
         )
