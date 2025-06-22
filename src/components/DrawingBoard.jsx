@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { useTool } from "../context/ToolContext";
 import "./DrawingBoard.css";
 
-
 const DrawingBoard = () => {
   const canvasRef = useRef(null);
   const { tool, showAnnotations } = useTool();
@@ -20,7 +19,7 @@ const DrawingBoard = () => {
 
   const handleDeleteShape = () => {
     if (selectedShape !== null) {
-      setDrawnShapes(prev => prev.filter((_, i) => i !== selectedShape));
+      setDrawnShapes((prev) => prev.filter((_, i) => i !== selectedShape));
       setSelectedShape(null);
     }
   };
@@ -42,20 +41,44 @@ const DrawingBoard = () => {
       if (shape.type === "line") {
         ctx.moveTo(shape.start.x, shape.start.y);
         ctx.lineTo(shape.end.x, shape.end.y);
+
+        if (showAnnotations) {
+          const dx = shape.end.x - shape.start.x;
+          const dy = shape.end.y - shape.start.y;
+          const length = Math.round(Math.hypot(dx, dy));
+
+          const midX = (shape.start.x + shape.end.x) / 2;
+          const midY = (shape.start.y + shape.end.y) / 2;
+
+          ctx.font = "12px Arial";
+          ctx.fillStyle = "black";
+          ctx.fillText(`L=${length}`, midX + 5, midY - 5);
+        }
       } else if (shape.type === "rectangle") {
         const width = shape.end.x - shape.start.x;
         const height = shape.end.y - shape.start.y;
         ctx.rect(shape.start.x, shape.start.y, width, height);
         if (showAnnotations) {
           ctx.font = "12px Arial";
-          ctx.fillText(`${Math.abs(width)} x ${Math.abs(height)}`, shape.start.x + 5, shape.start.y - 5);
+          ctx.fillText(
+            `${Math.abs(width)} x ${Math.abs(height)}`,
+            shape.start.x + 5,
+            shape.start.y - 5
+          );
         }
       } else if (shape.type === "circle") {
-        const radius = Math.hypot(shape.end.x - shape.start.x, shape.end.y - shape.start.y);
+        const radius = Math.hypot(
+          shape.end.x - shape.start.x,
+          shape.end.y - shape.start.y
+        );
         ctx.arc(shape.start.x, shape.start.y, radius, 0, Math.PI * 2);
         if (showAnnotations) {
           ctx.font = "12px Arial";
-          ctx.fillText(`r=${Math.round(radius)}`, shape.start.x + 5, shape.start.y - 5);
+          ctx.fillText(
+            `r=${Math.round(radius)}`,
+            shape.start.x + 5,
+            shape.start.y - 5
+          );
         }
       }
 
@@ -75,16 +98,22 @@ const DrawingBoard = () => {
     const canvasRect = canvasRef.current.getBoundingClientRect();
     return {
       x: event.clientX - canvasRect.left,
-      y: event.clientY - canvasRect.top
+      y: event.clientY - canvasRect.top,
     };
   };
 
   const getShapeBottomRight = (shape) => {
     if (shape.type === "circle") {
-      const radius = Math.hypot(shape.end.x - shape.start.x, shape.end.y - shape.start.y);
+      const radius = Math.hypot(
+        shape.end.x - shape.start.x,
+        shape.end.y - shape.start.y
+      );
       return { x: shape.start.x + radius, y: shape.start.y + radius };
     } else if (shape.type === "rectangle") {
-      return { x: Math.max(shape.start.x, shape.end.x), y: Math.max(shape.start.y, shape.end.y) };
+      return {
+        x: Math.max(shape.start.x, shape.end.x),
+        y: Math.max(shape.start.y, shape.end.y),
+      };
     }
     return { x: shape.end.x, y: shape.end.y };
   };
@@ -109,10 +138,15 @@ const DrawingBoard = () => {
       const lineLengthSq = dx * dx + dy * dy;
 
       if (lineLengthSq === 0) {
-        return Math.hypot(point.x - shape.start.x, point.y - shape.start.y) < hitTolerance;
+        return (
+          Math.hypot(point.x - shape.start.x, point.y - shape.start.y) <
+          hitTolerance
+        );
       }
 
-      const t = ((point.x - shape.start.x) * dx + (point.y - shape.start.y) * dy) / lineLengthSq;
+      const t =
+        ((point.x - shape.start.x) * dx + (point.y - shape.start.y) * dy) /
+        lineLengthSq;
       const closestX = shape.start.x + dx * Math.max(0, Math.min(1, t));
       const closestY = shape.start.y + dy * Math.max(0, Math.min(1, t));
 
@@ -123,12 +157,17 @@ const DrawingBoard = () => {
       const yMin = Math.min(shape.start.y, shape.end.y);
       const yMax = Math.max(shape.start.y, shape.end.y);
       return (
-        point.x >= xMin && point.x <= xMax &&
-        point.y >= yMin && point.y <= yMax
+        point.x >= xMin && point.x <= xMax && point.y >= yMin && point.y <= yMax
       );
     } else if (shape.type === "circle") {
-      const radius = Math.hypot(shape.end.x - shape.start.x, shape.end.y - shape.start.y);
-      const distance = Math.hypot(point.x - shape.start.x, point.y - shape.start.y);
+      const radius = Math.hypot(
+        shape.end.x - shape.start.x,
+        shape.end.y - shape.start.y
+      );
+      const distance = Math.hypot(
+        point.x - shape.start.x,
+        point.y - shape.start.y
+      );
       return Math.abs(distance - radius) < hitTolerance;
     }
     return false;
@@ -139,21 +178,31 @@ const DrawingBoard = () => {
     setStartPoint(currentMousePoint);
 
     if (tool === "select") {
-      const clickedShapeIndex = drawnShapes.findIndex(shape =>
+      const clickedShapeIndex = drawnShapes.findIndex((shape) =>
         isPointWithinShape(currentMousePoint, shape)
       );
 
       if (clickedShapeIndex !== -1) {
         const clickedShape = drawnShapes[clickedShapeIndex];
-        setSelectedShape(clickedShapeIndex);
 
+        // Check resize handle BEFORE deselecting
         if (isPointNearResizeHandle(currentMousePoint, clickedShape)) {
+          setSelectedShape(clickedShapeIndex);
           setIsResizing(true);
         } else {
+          setSelectedShape(clickedShapeIndex);
           setIsDragging(true);
         }
       } else {
-        setSelectedShape(null);
+        // Don't deselect if you're clicking near the resize handle of selected shape
+        if (
+          selectedShape !== null &&
+          isPointNearResizeHandle(currentMousePoint, drawnShapes[selectedShape])
+        ) {
+          setIsResizing(true);
+        } else {
+          setSelectedShape(null);
+        }
       }
     }
   };
@@ -165,13 +214,13 @@ const DrawingBoard = () => {
       const deltaX = currentMousePoint.x - startPoint.x;
       const deltaY = currentMousePoint.y - startPoint.y;
 
-      setDrawnShapes(prevShapes =>
+      setDrawnShapes((prevShapes) =>
         prevShapes.map((shape, index) =>
           index === selectedShape
             ? {
                 ...shape,
                 start: { x: shape.start.x + deltaX, y: shape.start.y + deltaY },
-                end: { x: shape.end.x + deltaX, y: shape.end.y + deltaY }
+                end: { x: shape.end.x + deltaX, y: shape.end.y + deltaY },
               }
             : shape
         )
@@ -180,18 +229,13 @@ const DrawingBoard = () => {
     }
 
     if (isResizing && selectedShape !== null) {
-      setDrawnShapes(prevShapes =>
+      setDrawnShapes((prevShapes) =>
         prevShapes.map((shape, index) =>
           index === selectedShape
-            ? shape.type === "circle"
-              ? {
-                  ...shape,
-                  end: {
-                    x: shape.start.x + (currentMousePoint.x - shape.start.x),
-                    y: shape.start.y + (currentMousePoint.y - shape.start.y)
-                  }
-                }
-              : { ...shape, end: currentMousePoint }
+            ? {
+                ...shape,
+                end: currentMousePoint, // works for both circle and rectangle
+              }
             : shape
         )
       );
@@ -201,7 +245,10 @@ const DrawingBoard = () => {
   const handleMouseUp = (e) => {
     if (startPoint && tool !== "select" && !isDragging && !isResizing) {
       const endPoint = getCanvasCoordinates(e);
-      setDrawnShapes(prev => [...prev, { type: tool, start: startPoint, end: endPoint }]);
+      setDrawnShapes((prev) => [
+        ...prev,
+        { type: tool, start: startPoint, end: endPoint },
+      ]);
     }
     setIsDragging(false);
     setIsResizing(false);
@@ -235,7 +282,7 @@ const DrawingBoard = () => {
               ? isResizing
                 ? "se-resize"
                 : "pointer"
-              : "crosshair"
+              : "crosshair",
         }}
       />
       {selectedShape !== null && (
